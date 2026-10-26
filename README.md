@@ -16,6 +16,7 @@ It reads compose files from mounted folders (Dockge, Komodo) and/or git repos, m
 
 1. Copy `compose.yaml` and `.env.example` into a stack folder, rename `.env.example` to `.env` and fill it in.
 2. Make sure `docker-socket-proxy` allows `CONTAINERS=1` and `IMAGES=1`.
+   Create a host user for dimuda (`DIMUDA_PUID`/`DIMUDA_PGID`) that owns `${APP_DIR}/data`, and a group (`STACKS_READ_GID`) with a recursive, inherited read ACL on the mounted stacks folders. The container runs as that user with the group added via `group_add`; host group membership alone does not apply inside containers.
 3. The image is private on ghcr.io: run `docker login ghcr.io` on the host once (PAT with `read:packages`), or build it locally with `docker build -t ghcr.io/cravingpixels/dimuda:latest .`.
 4. `docker compose up -d`, then open `https://dimuda.<your domain>`.
 

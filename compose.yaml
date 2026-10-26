@@ -1,5 +1,6 @@
 # Required .env variables:
 # TZ, APP_DIR, DOMAIN, DIMUDA_SUBDOMAIN, DIMUDA_NAME
+# DIMUDA_PUID, DIMUDA_PGID, STACKS_READ_GID
 # DOCKGE_STACKS_DIR, KOMODO_STACKS_DIR
 # GIT_REPOS, GIT_TOKEN, GITHUB_TOKEN               ← never commit tokens
 # NTFY_URL, NTFY_TOPIC, NTFY_TOKEN                 ← never commit token
@@ -14,6 +15,10 @@ services:
   dimuda:
     image: ghcr.io/cravingpixels/dimuda:${DIMUDA_VERSION:-latest}
     container_name: dimuda
+    user: "${DIMUDA_PUID}:${DIMUDA_PGID}"
+    # Supplementary group with a read ACL on the mounted stacks folders.
+    group_add:
+      - "${STACKS_READ_GID}"
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
