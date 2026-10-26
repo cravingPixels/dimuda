@@ -8,7 +8,6 @@
 #
 # Depends on docker-socket-proxy (CONTAINERS=1, IMAGES=1) and traefik stacks being up.
 # Compose folders are mounted read-only; their .env files are read only to resolve ${VAR} in image names.
-# Optional: ${APP_DIR}/config/overrides.yaml adds to or replaces the bundled per-image overrides.
 
 name: dimuda
 
@@ -42,7 +41,6 @@ services:
       NTFY_TOPIC: ${NTFY_TOPIC:-}
       NTFY_TOKEN: ${NTFY_TOKEN:-}
     volumes:
-      - ${APP_DIR}/config:/config:ro
       - ${APP_DIR}/data:/data
       - ${DOCKGE_STACKS_DIR}:/stacks/dockge:ro
       - ${KOMODO_STACKS_DIR}:/stacks/komodo:ro

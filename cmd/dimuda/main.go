@@ -43,7 +43,7 @@ func run(log *slog.Logger) error {
 	}
 	log.Info("running as", "uid", os.Geteuid(), "gid", os.Getegid(), "dropped_from_root", dropped)
 
-	ov, err := overrides.LoadLayered(cfg.OverridesFile, cfg.UserOverrides)
+	ov, err := overrides.Load(cfg.OverridesFile)
 	if err != nil {
 		return err
 	}

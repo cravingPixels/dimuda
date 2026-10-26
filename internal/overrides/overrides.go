@@ -4,7 +4,6 @@
 package overrides
 
 import (
-	"errors"
 	"fmt"
 	"os"
 
@@ -35,37 +34,14 @@ type file struct {
 	Images map[string]Image `yaml:"images"`
 }
 
-// Load reads path; a missing file yields an empty set so the dashboard works without one.
+// Load reads path. A missing file is an error: without it lsio/hotio changelogs and custom
+// tag formats silently disappear.
 func Load(path string) (Set, error) {
 	raw, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return Set{images: map[string]Image{}}, nil
-	}
 	if err != nil {
-		return Set{}, err
+		return Set{}, fmt.Errorf("overrides: %w", err)
 	}
 	return Parse(raw)
-}
-
-// LoadLayered reads the bundled defaults, which must exist, and then the optional user file,
-// whose entries replace the bundled ones image by image.
-func LoadLayered(bundled, user string) (Set, error) {
-	raw, err := os.ReadFile(bundled)
-	if err != nil {
-		return Set{}, fmt.Errorf("bundled overrides: %w", err)
-	}
-	set, err := Parse(raw)
-	if err != nil {
-		return Set{}, fmt.Errorf("bundled overrides %s: %w", bundled, err)
-	}
-	custom, err := Load(user)
-	if err != nil {
-		return Set{}, fmt.Errorf("user overrides %s: %w", user, err)
-	}
-	for name, img := range custom.images {
-		set.images[name] = img
-	}
-	return set, nil
 }
 
 func Parse(raw []byte) (Set, error) {

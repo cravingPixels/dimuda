@@ -46,42 +46,9 @@ func TestParseRejectsBadRegex(t *testing.T) {
 	}
 }
 
-func TestLoadMissingFile(t *testing.T) {
-	set, err := Load(filepath.Join(t.TempDir(), "missing.yaml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	ref, _ := imageref.Parse("redis")
-	if set.For(ref).Changelog != "" {
-		t.Error("expected empty set")
-	}
-}
-
-func TestLoadLayered(t *testing.T) {
-	dir := t.TempDir()
-	bundled := filepath.Join(dir, "bundled.yaml")
-	user := filepath.Join(dir, "user.yaml")
-	os.WriteFile(bundled, []byte("images:\n  redis: {changelog: redis/redis}\n  traefik: {changelog: traefik/traefik}\n"), 0o644)
-	os.WriteFile(user, []byte("images:\n  redis: {ignore: true}\n"), 0o644)
-
-	set, err := LoadLayered(bundled, user)
-	if err != nil {
-		t.Fatal(err)
-	}
-	redis, _ := imageref.Parse("redis")
-	traefik, _ := imageref.Parse("traefik")
-	if img := set.For(redis); !img.Ignore || img.Changelog != "" {
-		t.Errorf("user entry should replace bundled one, got %+v", img)
-	}
-	if set.For(traefik).Changelog != "traefik/traefik" {
-		t.Error("bundled entries without a user entry must remain")
-	}
-
-	if _, err := LoadLayered(bundled, filepath.Join(dir, "missing.yaml")); err != nil {
-		t.Errorf("missing user file must be fine: %v", err)
-	}
-	if _, err := LoadLayered(filepath.Join(dir, "missing.yaml"), user); err == nil {
-		t.Error("missing bundled file must fail")
+func TestLoadMissingFileFails(t *testing.T) {
+	if _, err := Load(filepath.Join(t.TempDir(), "missing.yaml")); err == nil {
+		t.Error("expected error for missing overrides file")
 	}
 }
 

@@ -34,8 +34,7 @@ The first scan takes about a minute for ~60 images. After that it rescans every 
 | `SCAN_INTERVAL` | `6h` | Minimum `5m`. |
 | `PUID`, `PGID` | `65532` | User the app switches to after preparing `/data`. `0` is rejected. |
 | `STACKS_READ_GID` | – | Comma-separated supplementary GIDs, e.g. the group that can read your stacks folders. |
-| `OVERRIDES_FILE` | `/app/overrides.yaml` | Bundled per-image overrides, see below. |
-| `USER_OVERRIDES_FILE` | `/config/overrides.yaml` | Optional; its entries replace bundled ones per image. |
+| `OVERRIDES_FILE` | `/app/overrides.yaml` | Per-image overrides bundled in the image, see below. |
 | `NTFY_URL`, `NTFY_TOPIC`, `NTFY_TOKEN` | – | ntfy alerts for new upstream releases. The first scan after a fresh install only records state, so it does not alert on everything at once. |
 | `PUBLIC_URL` | – | Link opened when tapping an ntfy notification. |
 | `DATA_DIR` | `/data` | State (last report, what was already notified) and git clones. |
@@ -43,7 +42,7 @@ The first scan takes about a minute for ~60 images. After that it rescans every 
 
 ## Overrides
 
-`overrides.yaml` holds what registries don't expose. The bundled file covers common images; put your own entries in `${APP_DIR}/config/overrides.yaml` and they replace bundled entries image by image:
+`overrides.yaml` (bundled in the image) holds what registries don't expose. To add an image, edit it in this repo:
 
 ```yaml
 images:

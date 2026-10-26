@@ -39,9 +39,6 @@ func TestLoad(t *testing.T) {
 	if c.PUID != 3001 || c.PGID != 3001 || len(c.ExtraGIDs) != 2 || c.ExtraGIDs[1] != 3003 {
 		t.Errorf("ids = %d:%d %v", c.PUID, c.PGID, c.ExtraGIDs)
 	}
-	if c.UserOverrides != "/config/overrides.yaml" {
-		t.Errorf("user overrides = %q", c.UserOverrides)
-	}
 	if c.ScanInterval != 12*time.Hour || c.ListenAddr != ":8080" || c.DataDir != "/data" || !c.NtfyEnabled() {
 		t.Errorf("config = %+v", c)
 	}

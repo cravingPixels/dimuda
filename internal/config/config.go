@@ -23,7 +23,6 @@ type Config struct {
 	DockerHost    string
 	GitHubToken   string
 	OverridesFile string
-	UserOverrides string
 	ScanInterval  time.Duration
 	PUID          int
 	PGID          int
@@ -51,7 +50,6 @@ func Load(getenv func(string) string) (Config, error) {
 		DockerHost:    get("DOCKER_HOST", ""),
 		GitHubToken:   get("GITHUB_TOKEN", ""),
 		OverridesFile: get("OVERRIDES_FILE", "/app/overrides.yaml"),
-		UserOverrides: get("USER_OVERRIDES_FILE", "/config/overrides.yaml"),
 		NtfyURL:       get("NTFY_URL", ""),
 		NtfyTopic:     get("NTFY_TOPIC", ""),
 		NtfyToken:     get("NTFY_TOKEN", ""),
