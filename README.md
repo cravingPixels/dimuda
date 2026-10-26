@@ -75,4 +75,4 @@ make run COMPOSE_DIRS=stacks=../docker-compose-stacks/stacks
 make image
 ```
 
-CI (GitHub Actions) runs the tests and pushes multi-arch images to `ghcr.io/cravingpixels/dimuda` on every push to `main` and on `v*` tags.
+CI (GitHub Actions) runs the tests and pushes `linux/amd64` images to `ghcr.io/cravingpixels/dimuda` on every push to `main` and on `v*` tags.
