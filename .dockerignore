@@ -1,0 +1,6 @@
+.git
+.github
+data
+*.md
+compose.yaml
+.env*

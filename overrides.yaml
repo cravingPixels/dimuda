@@ -1,0 +1,81 @@
+# Per-image knowledge the registries don't expose. Keys are image names as written in compose
+# files (the tag is ignored). Fields:
+#   changelog: GitHub "owner/repo" whose releases are the upstream application's releases.
+#              Needed when the image's org.opencontainers.image.source label points to a
+#              wrapper repo (LinuxServer.io, hotio, Docker official images).
+#   tagRegex:  custom tag format; must define (?P<version>...), may define build/prefix/suffix.
+#   ignore:    true to hide the image from update checks (still listed, marked ignored).
+#   note:      free text shown in the dashboard.
+images:
+  # LinuxServer.io: tags are <upstream version>-ls<build>
+  lscr.io/linuxserver/calibre-web:
+    changelog: janeczku/calibre-web
+  lscr.io/linuxserver/lidarr:
+    changelog: Lidarr/Lidarr
+  lscr.io/linuxserver/nextcloud:
+    changelog: nextcloud/server
+  lscr.io/linuxserver/prowlarr:
+    changelog: Prowlarr/Prowlarr
+  lscr.io/linuxserver/syncthing:
+    changelog: syncthing/syncthing
+  lscr.io/linuxserver/qbittorrent:
+    changelog: qbittorrent/qBittorrent
+    tagRegex: '^(?P<version>\d+\.\d+\.\d+)_v[\d.]+-ls(?P<build>\d+)$'
+    note: Tags are <qbittorrent>_v<libtorrent>-ls<build>; the libtorrent part is ignored when comparing.
+  lscr.io/linuxserver/firefox:
+    tagRegex: '^(?P<version>\d+(?:\.\d+)*)build\d+-[\w.]+-ls(?P<build>\d+)$'
+    note: Tags are xtradeb package strings (<version>build<n>-<pkg>-ls<build>); no GitHub release notes.
+
+  # hotio: release tags are release-<upstream version>
+  ghcr.io/hotio/sonarr:
+    changelog: Sonarr/Sonarr
+  ghcr.io/hotio/radarr:
+    changelog: Radarr/Radarr
+  ghcr.io/hotio/bazarr:
+    changelog: morpheus65535/bazarr
+
+  # Docker official images point their source label at docker-library packaging repos.
+  redis:
+    changelog: redis/redis
+  valkey/valkey:
+    changelog: valkey-io/valkey
+  traefik:
+    changelog: traefik/traefik
+  mariadb:
+    changelog: MariaDB/server
+
+  # Images whose source label is missing or points elsewhere.
+  crocodilestick/calibre-web-automated:
+    changelog: crocodilestick/Calibre-Web-Automated
+  pihole/pihole:
+    changelog: pi-hole/docker-pi-hole
+  jellyfin/jellyfin:
+    changelog: jellyfin/jellyfin
+  getmeili/meilisearch:
+    changelog: meilisearch/meilisearch
+  n8nio/n8n:
+    changelog: n8n-io/n8n
+  tailscale/tailscale:
+    changelog: tailscale/tailscale
+  prom/prometheus:
+    changelog: prometheus/prometheus
+  prom/node-exporter:
+    changelog: prometheus/node_exporter
+  grafana/grafana:
+    changelog: grafana/grafana
+  onlyoffice/documentserver:
+    changelog: ONLYOFFICE/DocumentServer
+  rustdesk/rustdesk-server:
+    changelog: rustdesk/rustdesk-server
+  louislam/uptime-kuma:
+    changelog: louislam/uptime-kuma
+  vikunja/vikunja:
+    changelog: go-vikunja/vikunja
+
+  dokuwiki/dokuwiki:
+    note: Calendar releases (YYYY-MM-DD plus a hotfix letter); no GitHub release notes.
+  searxng/searxng:
+    note: Rolling calendar builds tagged with a commit hash; no release notes.
+  komodo-mongo:
+    ignore: true
+    note: Built locally from images/mongo.

@@ -1,0 +1,98 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"syscall"
+	"time"
+
+	"github.com/cravingPixels/image-update-dashboard/internal/app"
+	"github.com/cravingPixels/image-update-dashboard/internal/changelog"
+	"github.com/cravingPixels/image-update-dashboard/internal/config"
+	"github.com/cravingPixels/image-update-dashboard/internal/docker"
+	"github.com/cravingPixels/image-update-dashboard/internal/gitsource"
+	"github.com/cravingPixels/image-update-dashboard/internal/notify"
+	"github.com/cravingPixels/image-update-dashboard/internal/overrides"
+	"github.com/cravingPixels/image-update-dashboard/internal/registry"
+	"github.com/cravingPixels/image-update-dashboard/internal/scanner"
+	"github.com/cravingPixels/image-update-dashboard/internal/web"
+)
+
+func main() {
+	log := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	if err := run(log); err != nil {
+		log.Error("fatal", "err", err)
+		os.Exit(1)
+	}
+}
+
+func run(log *slog.Logger) error {
+	cfg, err := config.Load(os.Getenv)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
+		return err
+	}
+	ov, err := overrides.Load(cfg.OverridesFile)
+	if err != nil {
+		return err
+	}
+
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	s := &scanner.Scanner{
+		Dirs:      cfg.ComposeDirs,
+		GitRepos:  cfg.GitRepos,
+		Git:       gitsource.NewSyncer(filepath.Join(cfg.DataDir, "git"), cfg.GitToken),
+		Registry:  registry.New(&http.Client{Timeout: 90 * time.Second}),
+		Releases:  changelog.New(httpClient, cfg.GitHubToken, cfg.ScanInterval),
+		Overrides: ov,
+		Logger:    log,
+	}
+	if cfg.DockerHost != "" {
+		dc, err := docker.New(cfg.DockerHost)
+		if err != nil {
+			return err
+		}
+		s.Docker = dc
+	}
+
+	var notifier app.Notifier
+	if cfg.NtfyEnabled() {
+		notifier = notify.NewNtfy(httpClient, cfg.NtfyURL, cfg.NtfyTopic, cfg.NtfyToken)
+	}
+
+	a, err := app.New(s, notifier, cfg.DataDir, cfg.PublicURL, log)
+	if err != nil {
+		return err
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	srv, err := web.New(ctx, a, log)
+	if err != nil {
+		return err
+	}
+	httpServer := &http.Server{Addr: cfg.ListenAddr, Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
+
+	go a.Run(ctx, cfg.ScanInterval)
+	go func() {
+		<-ctx.Done()
+		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		httpServer.Shutdown(shutdown)
+	}()
+
+	log.Info("listening", "addr", cfg.ListenAddr, "compose_dirs", len(cfg.ComposeDirs), "git_repos", len(cfg.GitRepos),
+		"docker", cfg.DockerHost != "", "ntfy", cfg.NtfyEnabled(), "interval", cfg.ScanInterval)
+	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return nil
+}
