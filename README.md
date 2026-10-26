@@ -1,4 +1,6 @@
-# image-update-dashboard
+# dimuda
+
+**D**ocker **IM**age **U**pdate **DA**shboard.
 
 A self-hosted dashboard that answers, for every image in your Docker Compose stacks:
 
@@ -14,8 +16,8 @@ It reads compose files from mounted folders (Dockge, Komodo) and/or git repos, m
 
 1. Copy `compose.yaml` and `.env.example` into a stack folder, rename `.env.example` to `.env` and fill it in.
 2. Make sure `docker-socket-proxy` allows `CONTAINERS=1` and `IMAGES=1`.
-3. The image is private on ghcr.io: run `docker login ghcr.io` on the host once (PAT with `read:packages`), or build it locally with `docker build -t ghcr.io/cravingpixels/image-update-dashboard:latest .`.
-4. `docker compose up -d`, then open `https://updates.<your domain>`.
+3. The image is private on ghcr.io: run `docker login ghcr.io` on the host once (PAT with `read:packages`), or build it locally with `docker build -t ghcr.io/cravingpixels/dimuda:latest .`.
+4. `docker compose up -d`, then open `https://dimuda.<your domain>`.
 
 The first scan takes about a minute for ~60 images. After that it rescans every `SCAN_INTERVAL` (default `6h`), or on demand with **Scan now**.
 
@@ -70,4 +72,4 @@ make run COMPOSE_DIRS=stacks=../docker-compose-stacks/stacks
 make image
 ```
 
-CI (GitHub Actions) runs the tests and pushes multi-arch images to `ghcr.io/cravingpixels/image-update-dashboard` on every push to `main` and on `v*` tags.
+CI (GitHub Actions) runs the tests and pushes multi-arch images to `ghcr.io/cravingpixels/dimuda` on every push to `main` and on `v*` tags.

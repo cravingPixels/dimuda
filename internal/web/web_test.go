@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cravingPixels/image-update-dashboard/internal/changelog"
-	"github.com/cravingPixels/image-update-dashboard/internal/scanner"
-	"github.com/cravingPixels/image-update-dashboard/internal/versioning"
+	"github.com/cravingPixels/dimuda/internal/changelog"
+	"github.com/cravingPixels/dimuda/internal/scanner"
+	"github.com/cravingPixels/dimuda/internal/versioning"
 )
 
 type fakeSource struct {

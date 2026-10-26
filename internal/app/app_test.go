@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cravingPixels/image-update-dashboard/internal/notify"
-	"github.com/cravingPixels/image-update-dashboard/internal/scanner"
-	"github.com/cravingPixels/image-update-dashboard/internal/versioning"
+	"github.com/cravingPixels/dimuda/internal/notify"
+	"github.com/cravingPixels/dimuda/internal/scanner"
+	"github.com/cravingPixels/dimuda/internal/versioning"
 )
 
 type fakeScanner struct{ report scanner.Report }

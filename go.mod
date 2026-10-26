@@ -1,4 +1,4 @@
-module github.com/cravingPixels/image-update-dashboard
+module github.com/cravingPixels/dimuda
 
 go 1.27.3
 

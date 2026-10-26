@@ -12,14 +12,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cravingPixels/image-update-dashboard/internal/changelog"
-	"github.com/cravingPixels/image-update-dashboard/internal/compose"
-	"github.com/cravingPixels/image-update-dashboard/internal/docker"
-	"github.com/cravingPixels/image-update-dashboard/internal/gitsource"
-	"github.com/cravingPixels/image-update-dashboard/internal/imageref"
-	"github.com/cravingPixels/image-update-dashboard/internal/overrides"
-	"github.com/cravingPixels/image-update-dashboard/internal/registry"
-	"github.com/cravingPixels/image-update-dashboard/internal/versioning"
+	"github.com/cravingPixels/dimuda/internal/changelog"
+	"github.com/cravingPixels/dimuda/internal/compose"
+	"github.com/cravingPixels/dimuda/internal/docker"
+	"github.com/cravingPixels/dimuda/internal/gitsource"
+	"github.com/cravingPixels/dimuda/internal/imageref"
+	"github.com/cravingPixels/dimuda/internal/overrides"
+	"github.com/cravingPixels/dimuda/internal/registry"
+	"github.com/cravingPixels/dimuda/internal/versioning"
 )
 
 const (

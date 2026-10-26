@@ -38,7 +38,7 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v6.2.0
         with:
-          images: ghcr.io/${{ github.repository_owner }}/image-update-dashboard
+          images: ghcr.io/${{ github.repository_owner }}/dimuda
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=semver,pattern={{version}}

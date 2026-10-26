@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/cravingPixels/image-update-dashboard/internal/imageref"
+	"github.com/cravingPixels/dimuda/internal/imageref"
 )
 
 func TestParseAndLookup(t *testing.T) {

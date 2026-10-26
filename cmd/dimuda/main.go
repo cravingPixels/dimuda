@@ -11,16 +11,16 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/cravingPixels/image-update-dashboard/internal/app"
-	"github.com/cravingPixels/image-update-dashboard/internal/changelog"
-	"github.com/cravingPixels/image-update-dashboard/internal/config"
-	"github.com/cravingPixels/image-update-dashboard/internal/docker"
-	"github.com/cravingPixels/image-update-dashboard/internal/gitsource"
-	"github.com/cravingPixels/image-update-dashboard/internal/notify"
-	"github.com/cravingPixels/image-update-dashboard/internal/overrides"
-	"github.com/cravingPixels/image-update-dashboard/internal/registry"
-	"github.com/cravingPixels/image-update-dashboard/internal/scanner"
-	"github.com/cravingPixels/image-update-dashboard/internal/web"
+	"github.com/cravingPixels/dimuda/internal/app"
+	"github.com/cravingPixels/dimuda/internal/changelog"
+	"github.com/cravingPixels/dimuda/internal/config"
+	"github.com/cravingPixels/dimuda/internal/docker"
+	"github.com/cravingPixels/dimuda/internal/gitsource"
+	"github.com/cravingPixels/dimuda/internal/notify"
+	"github.com/cravingPixels/dimuda/internal/overrides"
+	"github.com/cravingPixels/dimuda/internal/registry"
+	"github.com/cravingPixels/dimuda/internal/scanner"
+	"github.com/cravingPixels/dimuda/internal/web"
 )
 
 func main() {

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cravingPixels/image-update-dashboard/internal/gitsource"
-	"github.com/cravingPixels/image-update-dashboard/internal/scanner"
+	"github.com/cravingPixels/dimuda/internal/gitsource"
+	"github.com/cravingPixels/dimuda/internal/scanner"
 )
 
 type Config struct {

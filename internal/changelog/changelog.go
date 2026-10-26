@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cravingPixels/image-update-dashboard/internal/versioning"
+	"github.com/cravingPixels/dimuda/internal/versioning"
 )
 
 const (

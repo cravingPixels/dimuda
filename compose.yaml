@@ -1,5 +1,5 @@
 # Required .env variables:
-# TZ, APP_DIR, DOMAIN, UPDATES_SUBDOMAIN, UPDATES_NAME
+# TZ, APP_DIR, DOMAIN, DIMUDA_SUBDOMAIN, DIMUDA_NAME
 # DOCKGE_STACKS_DIR, KOMODO_STACKS_DIR
 # GIT_REPOS, GIT_TOKEN, GITHUB_TOKEN               ← never commit tokens
 # NTFY_URL, NTFY_TOPIC, NTFY_TOKEN                 ← never commit token
@@ -8,12 +8,12 @@
 # Depends on docker-socket-proxy (CONTAINERS=1, IMAGES=1) and traefik stacks being up.
 # Compose folders are mounted read-only; their .env files are read only to resolve ${VAR} in image names.
 
-name: image-updates
+name: dimuda
 
 services:
-  image-updates:
-    image: ghcr.io/cravingpixels/image-update-dashboard:${UPDATES_VERSION:-latest}
-    container_name: image-updates
+  dimuda:
+    image: ghcr.io/cravingpixels/dimuda:${DIMUDA_VERSION:-latest}
+    container_name: dimuda
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -26,13 +26,13 @@ services:
       GIT_TOKEN: ${GIT_TOKEN:-}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       DOCKER_HOST: tcp://dockerproxy:2375
-      SCAN_INTERVAL: ${UPDATES_SCAN_INTERVAL:-6h}
-      PUBLIC_URL: https://${UPDATES_SUBDOMAIN}.${DOMAIN}
+      SCAN_INTERVAL: ${DIMUDA_SCAN_INTERVAL:-6h}
+      PUBLIC_URL: https://${DIMUDA_SUBDOMAIN}.${DOMAIN}
       NTFY_URL: ${NTFY_URL:-}
       NTFY_TOPIC: ${NTFY_TOPIC:-}
       NTFY_TOKEN: ${NTFY_TOKEN:-}
     volumes:
-      - updates_data:/data
+      - dimuda_data:/data
       - ${DOCKGE_STACKS_DIR}:/stacks/dockge:ro
       - ${KOMODO_STACKS_DIR}:/stacks/komodo:ro
       # Uncomment to replace the bundled overrides with your own copy:
@@ -45,20 +45,20 @@ services:
     labels:
       traefik.enable: "true"
       traefik.docker.network: traefik-net
-      traefik.http.routers.image-updates.entrypoints: https
-      traefik.http.routers.image-updates.rule: Host(`${UPDATES_SUBDOMAIN}.${DOMAIN}`)
-      traefik.http.routers.image-updates.tls: "true"
-      traefik.http.routers.image-updates.tls.certresolver: cloudflare
-      traefik.http.services.image-updates.loadbalancer.server.port: "8080"
+      traefik.http.routers.dimuda.entrypoints: https
+      traefik.http.routers.dimuda.rule: Host(`${DIMUDA_SUBDOMAIN}.${DOMAIN}`)
+      traefik.http.routers.dimuda.tls: "true"
+      traefik.http.routers.dimuda.tls.certresolver: cloudflare
+      traefik.http.services.dimuda.loadbalancer.server.port: "8080"
       homepage.group: Infra
-      homepage.name: ${UPDATES_NAME}
+      homepage.name: ${DIMUDA_NAME}
       homepage.icon: sh-docker.svg
-      homepage.href: https://${UPDATES_SUBDOMAIN}.${DOMAIN}
+      homepage.href: https://${DIMUDA_SUBDOMAIN}.${DOMAIN}
       homepage.description: Container image updates
       kuma.enable: "true"
-      kuma.image-updates.keyword.name: ${UPDATES_NAME}
-      kuma.image-updates.keyword.url: https://${UPDATES_SUBDOMAIN}.${DOMAIN}/
-      kuma.image-updates.keyword.keyword: Image Updates
+      kuma.dimuda.keyword.name: ${DIMUDA_NAME}
+      kuma.dimuda.keyword.url: https://${DIMUDA_SUBDOMAIN}.${DOMAIN}/
+      kuma.dimuda.keyword.keyword: dimuda
     read_only: true
     mem_swappiness: 0
     deploy:
@@ -78,7 +78,7 @@ networks:
     external: true
 
 volumes:
-  updates_data:
+  dimuda_data:
     driver: local
     driver_opts:
       type: none

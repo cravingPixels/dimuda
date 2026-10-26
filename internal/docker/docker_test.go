@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cravingPixels/image-update-dashboard/internal/imageref"
+	"github.com/cravingPixels/dimuda/internal/imageref"
 )
 
 func TestContainers(t *testing.T) {

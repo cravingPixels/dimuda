@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cravingPixels/image-update-dashboard/internal/scanner"
-	"github.com/cravingPixels/image-update-dashboard/internal/versioning"
+	"github.com/cravingPixels/dimuda/internal/scanner"
+	"github.com/cravingPixels/dimuda/internal/versioning"
 )
 
 //go:embed templates/*.html

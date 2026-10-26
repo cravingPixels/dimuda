@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cravingPixels/image-update-dashboard/internal/notify"
-	"github.com/cravingPixels/image-update-dashboard/internal/scanner"
+	"github.com/cravingPixels/dimuda/internal/notify"
+	"github.com/cravingPixels/dimuda/internal/scanner"
 )
 
 type Scanner interface {

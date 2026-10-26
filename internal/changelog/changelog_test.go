@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cravingPixels/image-update-dashboard/internal/versioning"
+	"github.com/cravingPixels/dimuda/internal/versioning"
 )
 
 func TestRepoFromURL(t *testing.T) {

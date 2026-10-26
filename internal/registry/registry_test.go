@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/cravingPixels/image-update-dashboard/internal/imageref"
+	"github.com/cravingPixels/dimuda/internal/imageref"
 )
 
 func fakeRegistry(t *testing.T) (*httptest.Server, *int32) {

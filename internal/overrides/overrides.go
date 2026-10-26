@@ -10,8 +10,8 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"github.com/cravingPixels/image-update-dashboard/internal/imageref"
-	"github.com/cravingPixels/image-update-dashboard/internal/versioning"
+	"github.com/cravingPixels/dimuda/internal/imageref"
+	"github.com/cravingPixels/dimuda/internal/versioning"
 )
 
 type Image struct {

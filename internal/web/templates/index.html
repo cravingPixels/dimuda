@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Image Updates</title>
+<title>dimuda</title>
 {{if or .Scanning (not .Ready)}}<meta http-equiv="refresh" content="5">{{end}}
 <style>
 :root {
@@ -69,7 +69,7 @@ a { color: var(--patch); }
 <body>
 <header>
   <div>
-    <h1>Image Updates</h1>
+    <h1>dimuda <span class="meta">Docker IMage Update DAshboard</span></h1>
     <div class="meta">
       {{if .Ready}}Last scan {{ago .Report.GeneratedAt}} · took {{.Report.Duration}} · {{len .Report.Images}} images in {{len .Report.Stacks}} stacks{{else}}First scan running…{{end}}
       {{if .Scanning}} · <strong>scanning now</strong>{{end}}
