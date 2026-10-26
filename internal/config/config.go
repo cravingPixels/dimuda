@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,7 +23,11 @@ type Config struct {
 	DockerHost    string
 	GitHubToken   string
 	OverridesFile string
+	UserOverrides string
 	ScanInterval  time.Duration
+	PUID          int
+	PGID          int
+	ExtraGIDs     []int
 	NtfyURL       string
 	NtfyTopic     string
 	NtfyToken     string
@@ -46,6 +51,7 @@ func Load(getenv func(string) string) (Config, error) {
 		DockerHost:    get("DOCKER_HOST", ""),
 		GitHubToken:   get("GITHUB_TOKEN", ""),
 		OverridesFile: get("OVERRIDES_FILE", "/app/overrides.yaml"),
+		UserOverrides: get("USER_OVERRIDES_FILE", "/config/overrides.yaml"),
 		NtfyURL:       get("NTFY_URL", ""),
 		NtfyTopic:     get("NTFY_TOPIC", ""),
 		NtfyToken:     get("NTFY_TOKEN", ""),
@@ -57,6 +63,24 @@ func Load(getenv func(string) string) (Config, error) {
 		errs = append(errs, fmt.Errorf("SCAN_INTERVAL: %w", err))
 	} else if c.ScanInterval < 5*time.Minute {
 		errs = append(errs, fmt.Errorf("SCAN_INTERVAL must be at least 5m to stay inside registry and GitHub rate limits"))
+	}
+
+	if c.PUID, err = parseID(get("PUID", "65532")); err != nil {
+		errs = append(errs, fmt.Errorf("PUID: %w", err))
+	}
+	if c.PGID, err = parseID(get("PGID", "65532")); err != nil {
+		errs = append(errs, fmt.Errorf("PGID: %w", err))
+	}
+	for _, raw := range strings.Split(get("STACKS_READ_GID", ""), ",") {
+		if raw = strings.TrimSpace(raw); raw == "" {
+			continue
+		}
+		gid, err := parseID(raw)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("STACKS_READ_GID: %w", err))
+			continue
+		}
+		c.ExtraGIDs = append(c.ExtraGIDs, gid)
 	}
 
 	dirs, err := parseNamed(get("COMPOSE_DIRS", ""))
@@ -110,6 +134,17 @@ func parseNamed(raw string) (map[string]string, error) {
 		out[name] = value
 	}
 	return out, nil
+}
+
+func parseID(raw string) (int, error) {
+	id, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("%q is not a number", raw)
+	}
+	if id <= 0 {
+		return 0, fmt.Errorf("%d is not allowed; dimuda never runs as root", id)
+	}
+	return id, nil
 }
 
 func (c Config) NtfyEnabled() bool {

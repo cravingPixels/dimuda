@@ -18,6 +18,7 @@ import (
 	"github.com/cravingPixels/dimuda/internal/gitsource"
 	"github.com/cravingPixels/dimuda/internal/notify"
 	"github.com/cravingPixels/dimuda/internal/overrides"
+	"github.com/cravingPixels/dimuda/internal/privdrop"
 	"github.com/cravingPixels/dimuda/internal/registry"
 	"github.com/cravingPixels/dimuda/internal/scanner"
 	"github.com/cravingPixels/dimuda/internal/web"
@@ -36,10 +37,13 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
+	dropped, err := privdrop.Drop(privdrop.OS(), privdrop.Identity{UID: cfg.PUID, GID: cfg.PGID, Groups: cfg.ExtraGIDs}, cfg.DataDir)
+	if err != nil {
 		return err
 	}
-	ov, err := overrides.Load(cfg.OverridesFile)
+	log.Info("running as", "uid", os.Geteuid(), "gid", os.Getegid(), "dropped_from_root", dropped)
+
+	ov, err := overrides.LoadLayered(cfg.OverridesFile, cfg.UserOverrides)
 	if err != nil {
 		return err
 	}

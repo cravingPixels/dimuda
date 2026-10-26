@@ -16,7 +16,7 @@ It reads compose files from mounted folders (Dockge, Komodo) and/or git repos, m
 
 1. Copy `compose.yaml` and `.env.example` into a stack folder, rename `.env.example` to `.env` and fill it in.
 2. Make sure `docker-socket-proxy` allows `CONTAINERS=1` and `IMAGES=1`.
-   Create a host user for dimuda (`DIMUDA_PUID`/`DIMUDA_PGID`) that owns `${APP_DIR}/data`, and a group (`STACKS_READ_GID`) with a recursive, inherited read ACL on the mounted stacks folders. The container runs as that user with the group added via `group_add`; host group membership alone does not apply inside containers.
+   Create a host user and group for dimuda (`PUID`/`PGID`) and a group (`STACKS_READ_GID`) with a recursive, inherited read ACL on the mounted stacks folders. dimuda starts as root only to create and chown `${APP_DIR}/data`, then permanently switches to `PUID:PGID` with `STACKS_READ_GID` as a supplementary group, the way LinuxServer.io images handle `PUID`/`PGID`.
 3. The image is private on ghcr.io: run `docker login ghcr.io` on the host once (PAT with `read:packages`), or build it locally with `docker build -t ghcr.io/cravingpixels/dimuda:latest .`.
 4. `docker compose up -d`, then open `https://dimuda.<your domain>`.
 
@@ -32,7 +32,10 @@ The first scan takes about a minute for ~60 images. After that it rescans every 
 | `DOCKER_HOST` | – | `tcp://dockerproxy:2375` or `unix:///var/run/docker.sock`. Without it, running versions are unknown. |
 | `GITHUB_TOKEN` | – | Raises the GitHub API limit for release notes from 60 to 5000 requests/hour. |
 | `SCAN_INTERVAL` | `6h` | Minimum `5m`. |
-| `OVERRIDES_FILE` | `/app/overrides.yaml` | Per-image changelog repos and tag formats, see below. |
+| `PUID`, `PGID` | `65532` | User the app switches to after preparing `/data`. `0` is rejected. |
+| `STACKS_READ_GID` | – | Comma-separated supplementary GIDs, e.g. the group that can read your stacks folders. |
+| `OVERRIDES_FILE` | `/app/overrides.yaml` | Bundled per-image overrides, see below. |
+| `USER_OVERRIDES_FILE` | `/config/overrides.yaml` | Optional; its entries replace bundled ones per image. |
 | `NTFY_URL`, `NTFY_TOPIC`, `NTFY_TOKEN` | – | ntfy alerts for new upstream releases. The first scan after a fresh install only records state, so it does not alert on everything at once. |
 | `PUBLIC_URL` | – | Link opened when tapping an ntfy notification. |
 | `DATA_DIR` | `/data` | State (last report, what was already notified) and git clones. |
@@ -40,7 +43,7 @@ The first scan takes about a minute for ~60 images. After that it rescans every 
 
 ## Overrides
 
-`overrides.yaml` holds what registries don't expose:
+`overrides.yaml` holds what registries don't expose. The bundled file covers common images; put your own entries in `${APP_DIR}/config/overrides.yaml` and they replace bundled entries image by image:
 
 ```yaml
 images:
