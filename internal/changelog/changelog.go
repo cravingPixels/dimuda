@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strings"
@@ -55,10 +56,17 @@ type Client struct {
 
 	mu    sync.Mutex
 	cache map[string]cached
+
+	log *slog.Logger
 }
 
 func New(httpClient *http.Client, token string, ttl time.Duration) *Client {
 	return &Client{http: httpClient, baseURL: "https://api.github.com", token: token, ttl: ttl, cache: map[string]cached{}}
+}
+
+func (c *Client) WithLogger(log *slog.Logger) *Client {
+	c.log = log
+	return c
 }
 
 func (c *Client) WithBaseURL(u string) *Client {
@@ -83,17 +91,18 @@ func (c *Client) Releases(ctx context.Context, repo string) ([]Release, error) {
 }
 
 func (c *Client) fetch(ctx context.Context, repo string) ([]Release, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/repos/%s/releases?per_page=%d", c.baseURL, repo, perPage), nil)
+	token := c.currentToken()
+	resp, err := c.get(ctx, repo, token)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	if c.token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.token)
-	}
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("github releases of %s: %w", repo, err)
+	// Public release lists never need auth, so a rejected token must not cost us the changelogs.
+	if resp.StatusCode == http.StatusUnauthorized && token != "" {
+		resp.Body.Close()
+		c.dropToken()
+		if resp, err = c.get(ctx, repo, ""); err != nil {
+			return nil, err
+		}
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -119,6 +128,42 @@ func (c *Client) fetch(ctx context.Context, repo string) ([]Release, error) {
 		releases = append(releases, Release{Tag: r.TagName, Name: r.Name, Body: truncate(r.Body), URL: r.HTMLURL, Published: r.PublishedAt})
 	}
 	return releases, nil
+}
+
+func (c *Client) get(ctx context.Context, repo, token string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/repos/%s/releases?per_page=%d", c.baseURL, repo, perPage), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("github releases of %s: %w", repo, err)
+	}
+	return resp, nil
+}
+
+func (c *Client) currentToken() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.token
+}
+
+func (c *Client) dropToken() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.token == "" {
+		return
+	}
+	c.token = ""
+	log := c.log
+	if log == nil {
+		log = slog.Default()
+	}
+	log.Warn("GITHUB_TOKEN rejected by GitHub (HTTP 401); continuing without it at 60 requests/hour. Fix or empty GITHUB_TOKEN.")
 }
 
 func truncate(s string) string {

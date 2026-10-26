@@ -61,6 +61,30 @@ func TestReleasesFiltersAndCaches(t *testing.T) {
 	}
 }
 
+func TestRejectedTokenFallsBackToAnonymous(t *testing.T) {
+	authed := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "" {
+			authed++
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Write([]byte(`[{"tag_name":"v1.0.0"}]`))
+	}))
+	defer srv.Close()
+
+	c := New(srv.Client(), "changeme", time.Hour).WithBaseURL(srv.URL)
+	for _, repo := range []string{"a/a", "b/b", "c/c"} {
+		got, err := c.Releases(context.Background(), repo)
+		if err != nil || len(got) != 1 {
+			t.Fatalf("%s: releases=%v err=%v", repo, got, err)
+		}
+	}
+	if authed != 1 {
+		t.Errorf("token sent %d times, want it dropped after the first 401", authed)
+	}
+}
+
 func TestBetween(t *testing.T) {
 	releases := []Release{{Tag: "v4.0.17"}, {Tag: "v4.0.16"}, {Tag: "v4.0.15"}, {Tag: "nightly"}, {Tag: "v4.0.14"}}
 	p := versioning.Parser{}

@@ -54,7 +54,7 @@ func run(log *slog.Logger) error {
 		GitRepos:  cfg.GitRepos,
 		Git:       gitsource.NewSyncer(filepath.Join(cfg.DataDir, "git"), cfg.GitToken),
 		Registry:  registry.New(&http.Client{Timeout: 90 * time.Second}),
-		Releases:  changelog.New(httpClient, cfg.GitHubToken, cfg.ScanInterval),
+		Releases:  changelog.New(httpClient, cfg.GitHubToken, cfg.ScanInterval).WithLogger(log),
 		Overrides: ov,
 		Logger:    log,
 	}
