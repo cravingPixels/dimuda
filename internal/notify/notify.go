@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -13,6 +14,8 @@ type Message struct {
 	Body  string
 	Click string
 	Tags  []string
+	// Priority is ntfy's 1 (min) to 5 (urgent); 0 leaves the server default.
+	Priority int
 }
 
 type Ntfy struct {
@@ -34,6 +37,9 @@ func (n *Ntfy) Send(ctx context.Context, m Message) error {
 	req.Header.Set("Title", m.Title)
 	if m.Click != "" {
 		req.Header.Set("Click", m.Click)
+	}
+	if m.Priority > 0 {
+		req.Header.Set("Priority", strconv.Itoa(m.Priority))
 	}
 	if len(m.Tags) > 0 {
 		req.Header.Set("Tags", strings.Join(m.Tags, ","))

@@ -18,8 +18,30 @@ type Image struct {
 	TagRegex  string `yaml:"tagRegex"`
 	Ignore    bool   `yaml:"ignore"`
 	Note      string `yaml:"note"`
+	// AutoUpdate caps what dimuda applies by itself: none, patch (default) or minor.
+	AutoUpdate Level `yaml:"autoUpdate"`
 
 	parser versioning.Parser
+}
+
+type Level string
+
+const (
+	LevelNone  Level = "none"
+	LevelPatch Level = "patch"
+	LevelMinor Level = "minor"
+)
+
+// Allows reports whether an update of this kind may be applied without review. Pins and
+// lsio rebuilds count as patches: neither changes the application version.
+func (l Level) Allows(kind versioning.Kind) bool {
+	switch l {
+	case LevelNone:
+		return false
+	case LevelMinor:
+		return kind == versioning.KindMinor || LevelPatch.Allows(kind)
+	}
+	return kind == versioning.KindPatch || kind == versioning.KindRebuild || kind == versioning.KindPin
 }
 
 func (i Image) Parser() versioning.Parser {
@@ -58,6 +80,13 @@ func Parse(raw []byte) (Set, error) {
 		if img.parser, err = versioning.NewParser(img.TagRegex); err != nil {
 			return Set{}, fmt.Errorf("override %q: %w", key, err)
 		}
+		switch img.AutoUpdate {
+		case "":
+			img.AutoUpdate = LevelPatch
+		case LevelNone, LevelPatch, LevelMinor:
+		default:
+			return Set{}, fmt.Errorf("override %q: autoUpdate %q must be none, patch or minor", key, img.AutoUpdate)
+		}
 		set.images[ref.Name()] = img
 	}
 	return set, nil
@@ -65,5 +94,9 @@ func Parse(raw []byte) (Set, error) {
 
 // For matches by repository, so "redis", "docker.io/redis" and "docker.io/library/redis" are the same key.
 func (s Set) For(ref imageref.Ref) Image {
-	return s.images[ref.Name()]
+	img, ok := s.images[ref.Name()]
+	if !ok {
+		img.AutoUpdate = LevelPatch
+	}
+	return img
 }

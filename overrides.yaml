@@ -5,13 +5,19 @@
 #              wrapper repo (LinuxServer.io, hotio, Docker official images).
 #   tagRegex:  custom tag format; must define (?P<version>...), may define build/prefix/suffix.
 #   ignore:    true to hide the image from update checks (still listed, marked ignored).
+#   autoUpdate: what auto-update may apply without review: none, patch (default) or minor.
+#              Pins and lsio/hotio rebuilds count as patches. Majors always need review.
 #   note:      free text shown in the dashboard.
 images:
   # LinuxServer.io: tags are <upstream version>-ls<build>
   lscr.io/linuxserver/calibre-web:
     changelog: janeczku/calibre-web
+    # Old date tags (2021.12.16) would otherwise look like a newer major.
+    tagRegex: '^(?P<version>\d+\.\d+\.\d+)-ls(?P<build>\d+)$'
   lscr.io/linuxserver/lidarr:
     changelog: Lidarr/Lidarr
+    # Stray legacy tags (8.1.2135) would otherwise look like a newer major.
+    tagRegex: '^(?P<version>\d+\.\d+\.\d+\.\d+)-ls(?P<build>\d+)$'
   lscr.io/linuxserver/nextcloud:
     changelog: nextcloud/server
   lscr.io/linuxserver/prowlarr:
@@ -43,6 +49,9 @@ images:
     changelog: traefik/traefik
   mariadb:
     changelog: MariaDB/server
+  postgres:
+    # Postgres minors (16.x) are bug and security fix releases; majors need pg_upgrade.
+    autoUpdate: minor
 
   # Images whose source label is missing or points elsewhere.
   crocodilestick/calibre-web-automated:
@@ -53,6 +62,8 @@ images:
     changelog: jellyfin/jellyfin
   getmeili/meilisearch:
     changelog: meilisearch/meilisearch
+    # Every minor changes the on-disk index format and needs a dump and reimport.
+    autoUpdate: none
   n8nio/n8n:
     changelog: n8n-io/n8n
   tailscale/tailscale:

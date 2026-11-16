@@ -105,3 +105,19 @@ func TestNewest(t *testing.T) {
 		t.Error("expected no parseable release")
 	}
 }
+
+func TestMentionsSecurity(t *testing.T) {
+	cases := map[string]bool{
+		"Fixes CVE-2026-12345 in the parser":       true,
+		"See GHSA-abcd-1234-efgh":                  true,
+		"## Security\n- bump openssl":              true,
+		"Patched a vulnerability in uploads":       true,
+		"New dashboard widgets and faster startup": false,
+		"insecure-skip-verify flag renamed":        false,
+	}
+	for body, want := range cases {
+		if got := MentionsSecurity([]Release{{Body: body}}); got != want {
+			t.Errorf("MentionsSecurity(%q) = %v, want %v", body, got, want)
+		}
+	}
+}

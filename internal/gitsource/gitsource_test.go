@@ -59,3 +59,96 @@ func TestSyncRedactsToken(t *testing.T) {
 		t.Errorf("token leaked in error: %s", got)
 	}
 }
+
+func bareUpstream(t *testing.T) (bare, work string) {
+	t.Helper()
+	bare, work = t.TempDir(), t.TempDir()
+	git(t, bare, "init", "-q", "--bare", "-b", "main")
+	git(t, work, "init", "-q", "-b", "main")
+	os.WriteFile(filepath.Join(work, "compose.yaml"), []byte("image: a:1\n"), 0o644)
+	git(t, work, "add", ".")
+	git(t, work, "commit", "-qm", "one")
+	git(t, work, "push", "-q", "file://"+bare, "main")
+	return bare, work
+}
+
+func output(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func TestCommitAndPush(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	bare, _ := bareUpstream(t)
+	s := NewSyncer(t.TempDir(), "")
+	repo := Repo{Name: "stacks", URL: "file://" + bare}
+	dir, err := s.Sync(context.Background(), repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(dir, "compose.yaml"), []byte("image: a:2\n"), 0o644)
+	if err := s.Commit(context.Background(), repo, []string{"compose.yaml"}, "apps: bump a 1 → 2 (patch)", Author{Name: "dimuda", Email: "dimuda@localhost"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Push(context.Background(), repo); err != nil {
+		t.Fatal(err)
+	}
+	if got := output(t, bare, "log", "-1", "--format=%an|%s", "main"); got != "dimuda|apps: bump a 1 → 2 (patch)" {
+		t.Errorf("upstream head = %q", got)
+	}
+}
+
+func TestPushRejectedWhenUpstreamMoved(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	bare, work := bareUpstream(t)
+	s := NewSyncer(t.TempDir(), "")
+	repo := Repo{Name: "stacks", URL: "file://" + bare}
+	dir, err := s.Sync(context.Background(), repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	os.WriteFile(filepath.Join(work, "README.md"), []byte("x"), 0o644)
+	git(t, work, "add", ".")
+	git(t, work, "commit", "-qm", "someone else")
+	git(t, work, "push", "-q", "file://"+bare, "main")
+
+	os.WriteFile(filepath.Join(dir, "compose.yaml"), []byte("image: a:2\n"), 0o644)
+	if err := s.Commit(context.Background(), repo, []string{"compose.yaml"}, "bump", Author{Name: "dimuda", Email: "d@l"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Push(context.Background(), repo); err == nil {
+		t.Fatal("push over a moved upstream must fail, not force")
+	}
+	if _, err := s.Sync(context.Background(), repo); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "compose.yaml")); string(b) != "image: a:1\n" {
+		t.Errorf("after the next sync the unpushed edit must be gone, got %q", b)
+	}
+}
+
+func TestDiscard(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	bare, _ := bareUpstream(t)
+	s := NewSyncer(t.TempDir(), "")
+	repo := Repo{Name: "stacks", URL: "file://" + bare}
+	dir, _ := s.Sync(context.Background(), repo)
+	os.WriteFile(filepath.Join(dir, "compose.yaml"), []byte("half-applied"), 0o644)
+	if err := s.Discard(context.Background(), repo); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "compose.yaml")); string(b) != "image: a:1\n" {
+		t.Errorf("after discard got %q", b)
+	}
+}

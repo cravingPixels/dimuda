@@ -21,6 +21,8 @@ const (
 	KindPatch   Kind = "patch"
 	KindRebuild Kind = "rebuild"
 	KindDigest  Kind = "digest"
+	// KindPin moves a floating or digest-less tag to the exact tag and digest it serves today.
+	KindPin     Kind = "pin"
 	KindUnknown Kind = "unknown"
 )
 
@@ -34,6 +36,8 @@ const (
 	hashPlaceholder = "-<hash>"
 	// Single numbers above this are CI build or PR numbers ("8400", "release-9874757"), not versions.
 	maxSingleComponent = 999
+	// A first component this large is a year: calendar versions have no breaking-change major.
+	minCalendarYear = 1900
 )
 
 type Tag struct {
@@ -214,6 +218,39 @@ func Latest(cur Tag, tags []Tag) Tag {
 	return best
 }
 
+// LatestInMajor is Latest restricted to cur's major version, so a pending major does not
+// hide a patch on the current line. Calendar versions have no major: any newer one counts.
+func LatestInMajor(cur Tag, tags []Tag) Tag {
+	best := cur
+	for _, t := range tags {
+		if !Compatible(cur, t) || Compare(t, best) <= 0 {
+			continue
+		}
+		if !IsCalendar(cur) && t.Version[0] != cur.Version[0] {
+			continue
+		}
+		best = t
+	}
+	return best
+}
+
+func IsCalendar(t Tag) bool {
+	return len(t.Version) > 0 && t.Version[0] >= minCalendarYear
+}
+
+// BuildVariants returns the packaging builds of cur's exact version, newest first: the
+// "35.0.3-ls400" tags behind a bare lsio "35.0.3".
+func BuildVariants(cur Tag, tags []Tag) []Tag {
+	var out []Tag
+	for _, t := range tags {
+		if t.Build != "" && t.Prefix == cur.Prefix && t.Suffix == cur.Suffix && CompareVersions(t, cur) == 0 {
+			out = append(out, t)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return compareBuild(out[i].Build, out[j].Build) > 0 })
+	return out
+}
+
 // MostSpecific returns the highest tag inside the line cur points to, e.g. "v3.7.16" for
 // "v3" or "8.10.2-alpine" for "8-alpine". It is what a partial tag should be pinned to.
 func MostSpecific(cur Tag, tags []Tag) (Tag, bool) {
@@ -250,12 +287,16 @@ func hasPrefix(v, prefix []int) bool {
 	return true
 }
 
-// Classify says what kind of change moving from cur to latest is.
+// Classify says what kind of change moving from cur to latest is. A new year of a calendar
+// version is a minor: the year carries no compatibility promise.
 func Classify(cur, latest Tag) Kind {
 	for i := 0; i < len(cur.Version) && i < len(latest.Version); i++ {
 		if latest.Version[i] > cur.Version[i] {
 			switch i {
 			case 0:
+				if IsCalendar(cur) {
+					return KindMinor
+				}
 				return KindMajor
 			case 1:
 				return KindMinor

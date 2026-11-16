@@ -11,6 +11,7 @@ import (
 
 	"github.com/cravingPixels/dimuda/internal/gitsource"
 	"github.com/cravingPixels/dimuda/internal/scanner"
+	"github.com/cravingPixels/dimuda/internal/updater"
 )
 
 type Config struct {
@@ -19,7 +20,6 @@ type Config struct {
 	PublicURL     string
 	ComposeDirs   []scanner.Dir
 	GitRepos      []gitsource.Repo
-	GitToken      string
 	DockerHost    string
 	GitHubToken   string
 	OverridesFile string
@@ -30,6 +30,15 @@ type Config struct {
 	NtfyURL       string
 	NtfyTopic     string
 	NtfyToken     string
+
+	AutoUpdate    bool
+	MinReleaseAge time.Duration
+	UpdateWindow  updater.Window
+	GitAuthor     gitsource.Author
+	KomodoURL     string
+	KomodoAPIKey  string
+	KomodoSecret  string
+	KomodoStacks  string
 }
 
 // Load validates everything up front so a misconfigured container exits at start instead
@@ -46,13 +55,17 @@ func Load(getenv func(string) string) (Config, error) {
 		ListenAddr:    get("LISTEN_ADDR", ":8080"),
 		DataDir:       get("DATA_DIR", "/data"),
 		PublicURL:     get("PUBLIC_URL", ""),
-		GitToken:      get("GIT_TOKEN", ""),
 		DockerHost:    get("DOCKER_HOST", ""),
 		GitHubToken:   get("GITHUB_TOKEN", ""),
 		OverridesFile: get("OVERRIDES_FILE", "/app/overrides.yaml"),
 		NtfyURL:       get("NTFY_URL", ""),
 		NtfyTopic:     get("NTFY_TOPIC", ""),
 		NtfyToken:     get("NTFY_TOKEN", ""),
+		GitAuthor:     gitsource.Author{Name: get("GIT_AUTHOR_NAME", "dimuda"), Email: get("GIT_AUTHOR_EMAIL", "dimuda@localhost")},
+		KomodoURL:     get("KOMODO_URL", ""),
+		KomodoAPIKey:  get("KOMODO_API_KEY", ""),
+		KomodoSecret:  get("KOMODO_API_SECRET", ""),
+		KomodoStacks:  get("KOMODO_STACKS", "*"),
 	}
 
 	var errs []error
@@ -102,6 +115,22 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 	if (c.NtfyURL == "") != (c.NtfyTopic == "") {
 		errs = append(errs, errors.New("NTFY_URL and NTFY_TOPIC must be set together"))
+	}
+
+	if c.AutoUpdate, err = strconv.ParseBool(get("AUTO_UPDATE", "false")); err != nil {
+		errs = append(errs, fmt.Errorf("AUTO_UPDATE: %q is not true or false", get("AUTO_UPDATE", "")))
+	}
+	if c.MinReleaseAge, err = time.ParseDuration(get("MIN_RELEASE_AGE", "72h")); err != nil || c.MinReleaseAge < 0 {
+		errs = append(errs, fmt.Errorf("MIN_RELEASE_AGE: %q is not a duration such as 72h", get("MIN_RELEASE_AGE", "")))
+	}
+	if c.UpdateWindow, err = updater.ParseWindow(get("UPDATE_WINDOW", "03:00-05:00"), time.Local); err != nil {
+		errs = append(errs, fmt.Errorf("UPDATE_WINDOW: %w", err))
+	}
+	if c.AutoUpdate && len(c.GitRepos) == 0 {
+		errs = append(errs, errors.New("AUTO_UPDATE needs GIT_REPOS: mounted compose folders are read-only, only git sources get commits"))
+	}
+	if c.KomodoURL != "" && (c.KomodoAPIKey == "" || c.KomodoSecret == "") {
+		errs = append(errs, errors.New("KOMODO_URL needs KOMODO_API_KEY and KOMODO_API_SECRET"))
 	}
 	return c, errors.Join(errs...)
 }

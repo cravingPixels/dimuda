@@ -29,14 +29,19 @@ var composeFileNames = map[string]bool{
 var variable = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)(?:(:?[-?])([^}]*))?\}|\$([A-Za-z_][A-Za-z0-9_]*)`)
 
 type Usage struct {
-	Source     string
-	Stack      string
-	Service    string
-	File       string
+	Source  string
+	Stack   string
+	Service string
+	File    string
+	// Raw is the image as written in the file, before ${VAR} interpolation: what an edit must match.
+	Raw        string
 	Image      string
 	Ref        imageref.Ref
 	LocalBuild bool
-	Err        string
+	// Procedure is the Komodo procedure that must deploy this stack, from the
+	// dimuda.komodo.procedure label.
+	Procedure string
+	Err       string
 }
 
 type file struct {
@@ -45,8 +50,28 @@ type file struct {
 }
 
 type service struct {
-	Image string `yaml:"image"`
-	Build any    `yaml:"build"`
+	Image  string `yaml:"image"`
+	Build  any    `yaml:"build"`
+	Labels any    `yaml:"labels"`
+}
+
+const procedureLabel = "dimuda.komodo.procedure"
+
+// label reads a label from either compose form: a map, or a list of "key=value".
+func (s service) label(key string) string {
+	switch labels := s.Labels.(type) {
+	case map[string]any:
+		if v, ok := labels[key]; ok && v != nil {
+			return fmt.Sprint(v)
+		}
+	case []any:
+		for _, item := range labels {
+			if k, v, ok := strings.Cut(fmt.Sprint(item), "="); ok && k == key {
+				return v
+			}
+		}
+	}
+	return ""
 }
 
 // Scan walks root and returns one Usage per service that declares an image. Services that
@@ -123,7 +148,7 @@ func parseFile(source, root, path string) ([]Usage, error) {
 		if svc.Image == "" {
 			continue
 		}
-		u := Usage{Source: source, Stack: stack, Service: name, File: rel, LocalBuild: svc.Build != nil}
+		u := Usage{Source: source, Stack: stack, Service: name, File: rel, Raw: svc.Image, LocalBuild: svc.Build != nil, Procedure: svc.label(procedureLabel)}
 		u.Image = interpolate(svc.Image, env)
 		ref, err := imageref.Parse(u.Image)
 		if err != nil {

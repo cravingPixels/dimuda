@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/cravingPixels/dimuda/internal/changelog"
@@ -263,5 +264,77 @@ func TestScanReportsSourceErrors(t *testing.T) {
 	report := s.Scan(context.Background())
 	if len(report.Errors) != 1 || len(report.Images) != 0 {
 		t.Errorf("report = %+v", report)
+	}
+}
+
+func TestScanPlansUpdates(t *testing.T) {
+	root := t.TempDir()
+	writeStack(t, root, "apps", `
+services:
+  patch: {image: "acme/app:v1.2.0"}
+  floating: {image: "acme/app:v1"}
+  bare-lsio: {image: "lscr.io/linuxserver/nextcloud:35.0.3"}
+  current: {image: "acme/tool:2.0.0"}
+  pinned: {image: "acme/tool:2.0.0@sha256:tool"}
+  repushed: {image: "acme/old:1.0.0@sha256:old-before"}
+  rebuilt: {image: "acme/proxy:v3"}
+`)
+	reg := fakeRegistry{
+		tags: map[string][]string{
+			"docker.io/acme/app":            {"v1", "v1.2.0", "v1.2.1", "v2.0.0"},
+			"lscr.io/linuxserver/nextcloud": {"35.0.3", "35.0.3-ls400", "35.0.3-ls401"},
+			"docker.io/acme/tool":           {"2.0.0"},
+			"docker.io/acme/old":            {"1.0.0"},
+			"docker.io/acme/proxy":          {"v3", "v3.7", "v3.7.18", "v3.7.19"},
+		},
+		digests: map[string]string{
+			"docker.io/acme/app:v1":                      "sha256:app-121",
+			"docker.io/acme/app:v1.2.0":                  "sha256:app-120",
+			"docker.io/acme/app:v1.2.1":                  "sha256:app-121",
+			"docker.io/acme/app:v2.0.0":                  "sha256:app-200",
+			"lscr.io/linuxserver/nextcloud:35.0.3":       "sha256:nc-401",
+			"lscr.io/linuxserver/nextcloud:35.0.3-ls400": "sha256:nc-400",
+			"lscr.io/linuxserver/nextcloud:35.0.3-ls401": "sha256:nc-401",
+			"docker.io/acme/tool:2.0.0":                  "sha256:tool",
+			"docker.io/acme/old:1.0.0":                   "sha256:old-after",
+			"docker.io/acme/proxy:v3":                    "sha256:proxy-rebuilt",
+			"docker.io/acme/proxy:v3.7":                  "sha256:proxy-rebuilt",
+			"docker.io/acme/proxy:v3.7.18":               "sha256:proxy-3718",
+			"docker.io/acme/proxy:v3.7.19":               "sha256:proxy-3719",
+		},
+	}
+	ov, err := overrides.Parse([]byte("images:\n  acme/app: {changelog: acme/app}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Scanner{
+		Dirs: []Dir{{Name: "host", Path: root}}, Registry: reg, Overrides: ov,
+		Releases: fakeReleases{"acme/app": {{Tag: "v2.0.0"}, {Tag: "v1.2.1", Body: "Fixes CVE-2026-0001"}, {Tag: "v1.2.0"}}},
+	}
+	report := s.Scan(context.Background())
+
+	cases := []struct {
+		key  string
+		want *Update
+	}{
+		{"acme/app:v1.2.0", &Update{FromTag: "v1.2.0", ToTag: "v1.2.1", ToDigest: "sha256:app-121", Kind: versioning.KindPatch, Security: true}},
+		{"acme/app:v1", &Update{FromTag: "v1", ToTag: "v1.2.1", ToDigest: "sha256:app-121", Kind: versioning.KindPin}},
+		{"lscr.io/linuxserver/nextcloud:35.0.3", &Update{FromTag: "35.0.3", ToTag: "35.0.3-ls401", ToDigest: "sha256:nc-401", Kind: versioning.KindPin}},
+		{"acme/tool:2.0.0", &Update{FromTag: "2.0.0", ToTag: "2.0.0", ToDigest: "sha256:tool", Kind: versioning.KindPin}},
+		{"acme/tool:2.0.0@sha256:tool", nil},
+		{"acme/proxy:v3", &Update{FromTag: "v3", ToTag: "v3.7.19", ToDigest: "sha256:proxy-3719", Kind: versioning.KindPin}},
+		{"acme/old:1.0.0@sha256:old-before", &Update{FromTag: "1.0.0", FromDigest: "sha256:old-before", ToTag: "1.0.0", ToDigest: "sha256:old-after", Kind: versioning.KindDigest}},
+	}
+	for _, c := range cases {
+		got := byImage(t, report, c.key).Update
+		if !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%s: update = %+v, want %+v", c.key, got, c.want)
+		}
+	}
+	if r := byImage(t, report, "acme/app:v1.2.0"); r.Kind != versioning.KindMajor || r.Latest != "v2.0.0" {
+		t.Errorf("the pending major must stay visible: kind=%s latest=%s", r.Kind, r.Latest)
+	}
+	if u := byImage(t, report, "acme/app:v1.2.0").Usages[0]; u.Raw != "acme/app:v1.2.0" || u.File != filepath.Join("apps", "compose.yaml") {
+		t.Errorf("usage = %+v", u)
 	}
 }

@@ -55,10 +55,35 @@ func TestLoadFailsFast(t *testing.T) {
 		"root uid":          {"COMPOSE_DIRS": "/s", "PUID": "0"},
 		"bad gid":           {"COMPOSE_DIRS": "/s", "PGID": "staff"},
 		"bad extra gid":     {"COMPOSE_DIRS": "/s", "STACKS_READ_GID": "3002,x"},
+		"auto without git":  {"COMPOSE_DIRS": "/s", "AUTO_UPDATE": "true"},
+		"bad auto flag":     {"GIT_REPOS": "https://x/y.git", "AUTO_UPDATE": "yes please"},
+		"bad release age":   {"GIT_REPOS": "https://x/y.git", "MIN_RELEASE_AGE": "3 days"},
+		"bad window":        {"GIT_REPOS": "https://x/y.git", "UPDATE_WINDOW": "night"},
+		"komodo no secret":  {"GIT_REPOS": "https://x/y.git", "KOMODO_URL": "http://komodo:9120", "KOMODO_API_KEY": "k"},
 	}
 	for name, e := range cases {
 		if _, err := Load(env(e)); err == nil {
 			t.Errorf("%s: expected error", name)
 		}
+	}
+}
+
+func TestLoadAutoUpdate(t *testing.T) {
+	c, err := Load(env(map[string]string{
+		"GIT_REPOS":         "stacks=https://github.com/cravingPixels/docker-compose-stacks.git",
+		"AUTO_UPDATE":       "true",
+		"KOMODO_URL":        "http://komodo:9120",
+		"KOMODO_API_KEY":    "k",
+		"KOMODO_API_SECRET": "s",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.AutoUpdate || c.MinReleaseAge != 72*time.Hour || !c.UpdateWindow.IsSet() || c.KomodoStacks != "*" || c.GitAuthor.Name != "dimuda" {
+		t.Errorf("config = %+v", c)
+	}
+	off, err := Load(env(map[string]string{"COMPOSE_DIRS": "/s"}))
+	if err != nil || off.AutoUpdate {
+		t.Errorf("auto-update must default to off: %+v %v", off.AutoUpdate, err)
 	}
 }

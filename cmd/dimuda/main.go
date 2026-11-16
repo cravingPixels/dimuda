@@ -10,17 +10,22 @@ import (
 	"path/filepath"
 	"syscall"
 	"time"
+	// The alpine image ships no zoneinfo; UPDATE_WINDOW is read in TZ.
+	_ "time/tzdata"
 
 	"github.com/cravingPixels/dimuda/internal/app"
 	"github.com/cravingPixels/dimuda/internal/changelog"
 	"github.com/cravingPixels/dimuda/internal/config"
 	"github.com/cravingPixels/dimuda/internal/docker"
 	"github.com/cravingPixels/dimuda/internal/gitsource"
+	"github.com/cravingPixels/dimuda/internal/komodo"
 	"github.com/cravingPixels/dimuda/internal/notify"
 	"github.com/cravingPixels/dimuda/internal/overrides"
 	"github.com/cravingPixels/dimuda/internal/privdrop"
 	"github.com/cravingPixels/dimuda/internal/registry"
 	"github.com/cravingPixels/dimuda/internal/scanner"
+	"github.com/cravingPixels/dimuda/internal/tokencheck"
+	"github.com/cravingPixels/dimuda/internal/updater"
 	"github.com/cravingPixels/dimuda/internal/web"
 )
 
@@ -49,10 +54,11 @@ func run(log *slog.Logger) error {
 	}
 
 	httpClient := &http.Client{Timeout: 30 * time.Second}
+	git := gitsource.NewSyncer(filepath.Join(cfg.DataDir, "git"), cfg.GitHubToken)
 	s := &scanner.Scanner{
 		Dirs:      cfg.ComposeDirs,
 		GitRepos:  cfg.GitRepos,
-		Git:       gitsource.NewSyncer(filepath.Join(cfg.DataDir, "git"), cfg.GitToken),
+		Git:       git,
 		Registry:  registry.New(&http.Client{Timeout: 90 * time.Second}),
 		Releases:  changelog.New(httpClient, cfg.GitHubToken, cfg.ScanInterval).WithLogger(log),
 		Overrides: ov,
@@ -75,6 +81,18 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	if cfg.AutoUpdate {
+		au := app.AutoUpdate{
+			Policy: updater.Policy{MinAge: cfg.MinReleaseAge, Window: cfg.UpdateWindow, Overrides: ov},
+			Git:    git, Repos: cfg.GitRepos, Author: cfg.GitAuthor,
+		}
+		if cfg.KomodoURL != "" {
+			au.Deployer = komodo.New(httpClient, cfg.KomodoURL, cfg.KomodoAPIKey, cfg.KomodoSecret, cfg.KomodoStacks)
+		}
+		a.EnableAutoUpdate(au)
+	}
+
+	a.WatchTokens(tokencheck.NewGitHub(httpClient), []app.Token{{Name: "GITHUB_TOKEN", Value: cfg.GitHubToken}})
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -94,7 +112,8 @@ func run(log *slog.Logger) error {
 	}()
 
 	log.Info("listening", "addr", cfg.ListenAddr, "compose_dirs", len(cfg.ComposeDirs), "git_repos", len(cfg.GitRepos),
-		"docker", cfg.DockerHost != "", "ntfy", cfg.NtfyEnabled(), "interval", cfg.ScanInterval)
+		"docker", cfg.DockerHost != "", "ntfy", cfg.NtfyEnabled(), "interval", cfg.ScanInterval,
+		"auto_update", cfg.AutoUpdate, "komodo", cfg.KomodoURL != "")
 	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}

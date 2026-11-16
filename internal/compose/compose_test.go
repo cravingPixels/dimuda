@@ -25,6 +25,8 @@ services:
     image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-release}
   redis:
     image: redis:8-alpine
+    labels:
+      dimuda.komodo.procedure: immich-redeploy
   db:
     image: ${DB_IMAGE}
 `)
@@ -33,6 +35,7 @@ services:
 services:
   cache:
     image: redis:8-alpine
+    labels: ["dimuda.komodo.procedure=linkwarden-redeploy", "other=x"]
   mongo:
     image: komodo-mongo:latest
     build: ../images/mongo
@@ -57,6 +60,12 @@ services:
 	}
 	if u := byKey["immich/server"]; u.Image != "ghcr.io/immich-app/immich-server:v2.1.0" || u.Ref.Tag != "v2.1.0" || u.File != filepath.Join("immich", "compose.yaml") {
 		t.Errorf("immich/server = %+v", u)
+	}
+	if u := byKey["immich/server"]; u.Raw != "ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-release}" {
+		t.Errorf("immich/server Raw = %q, want the uninterpolated value", u.Raw)
+	}
+	if byKey["immich/redis"].Procedure != "immich-redeploy" || byKey["linkwarden/cache"].Procedure != "linkwarden-redeploy" || byKey["immich/server"].Procedure != "" {
+		t.Errorf("procedure labels: map form %q, list form %q, none %q", byKey["immich/redis"].Procedure, byKey["linkwarden/cache"].Procedure, byKey["immich/server"].Procedure)
 	}
 	if u := byKey["immich/db"]; u.Err == "" {
 		t.Errorf("unresolved variable should be reported, got %+v", u)

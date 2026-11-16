@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/cravingPixels/dimuda/internal/imageref"
+	"github.com/cravingPixels/dimuda/internal/versioning"
 )
 
 func TestParseAndLookup(t *testing.T) {
@@ -35,8 +36,8 @@ images:
 		t.Errorf("custom parser result %+v %v", tag, ok)
 	}
 	other, _ := imageref.Parse("nginx")
-	if (set.For(other) != Image{}) {
-		t.Error("unknown image should have no override")
+	if (set.For(other) != Image{AutoUpdate: LevelPatch}) {
+		t.Error("unknown image should have no override beyond the default patch level")
 	}
 }
 
@@ -59,5 +60,42 @@ func TestShippedOverridesFileIsValid(t *testing.T) {
 	}
 	if _, err := Load(path); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestAutoUpdateLevel(t *testing.T) {
+	set, err := Parse([]byte("images:\n  getmeili/meilisearch: {autoUpdate: none}\n  traefik: {autoUpdate: minor}\n  redis: {note: x}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	level := func(name string) Level {
+		ref, _ := imageref.Parse(name)
+		return set.For(ref).AutoUpdate
+	}
+	if level("getmeili/meilisearch") != LevelNone || level("traefik") != LevelMinor || level("redis") != LevelPatch {
+		t.Errorf("levels = %s %s %s", level("getmeili/meilisearch"), level("traefik"), level("redis"))
+	}
+	if _, err := Parse([]byte("images:\n  redis: {autoUpdate: major}\n")); err == nil {
+		t.Error("autoUpdate: major must be rejected; majors always need review")
+	}
+
+	cases := []struct {
+		level Level
+		kind  versioning.Kind
+		want  bool
+	}{
+		{LevelPatch, versioning.KindPatch, true},
+		{LevelPatch, versioning.KindRebuild, true},
+		{LevelPatch, versioning.KindPin, true},
+		{LevelPatch, versioning.KindMinor, false},
+		{LevelMinor, versioning.KindMinor, true},
+		{LevelMinor, versioning.KindMajor, false},
+		{LevelMinor, versioning.KindDigest, false},
+		{LevelNone, versioning.KindPin, false},
+	}
+	for _, c := range cases {
+		if got := c.level.Allows(c.kind); got != c.want {
+			t.Errorf("%s.Allows(%s) = %v, want %v", c.level, c.kind, got, c.want)
+		}
 	}
 }

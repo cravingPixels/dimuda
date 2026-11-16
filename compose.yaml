@@ -2,7 +2,7 @@
 # PUID, PGID, TZ, APP_DIR, DOMAIN, DIMUDA_SUBDOMAIN, DIMUDA_NAME
 # STACKS_READ_GID
 # DOCKGE_STACKS_DIR, KOMODO_STACKS_DIR
-# GIT_REPOS, GIT_TOKEN, GITHUB_TOKEN               ← never commit tokens
+# GIT_REPOS, GITHUB_TOKEN                         ← never commit tokens
 # NTFY_URL, NTFY_TOPIC, NTFY_TOKEN                 ← never commit token
 # See .env.example for full template.
 #
@@ -32,7 +32,6 @@ services:
       TZ: ${TZ}
       COMPOSE_DIRS: dockge=/stacks/dockge,komodo=/stacks/komodo
       GIT_REPOS: ${GIT_REPOS:-}
-      GIT_TOKEN: ${GIT_TOKEN:-}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       DOCKER_HOST: tcp://dockerproxy:2375
       SCAN_INTERVAL: ${DIMUDA_SCAN_INTERVAL:-6h}

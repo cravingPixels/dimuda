@@ -14,18 +14,23 @@ import (
 
 	"github.com/cravingPixels/dimuda/internal/changelog"
 	"github.com/cravingPixels/dimuda/internal/scanner"
+	"github.com/cravingPixels/dimuda/internal/updater"
 	"github.com/cravingPixels/dimuda/internal/versioning"
 )
 
 type fakeSource struct {
-	report scanner.Report
-	ready  bool
-	scans  atomic.Int32
+	report    scanner.Report
+	ready     bool
+	scans     atomic.Int32
+	decisions map[string]updater.Decision
 }
 
 func (f *fakeSource) Report() (scanner.Report, bool) { return f.report, f.ready }
 func (f *fakeSource) Scanning() bool                 { return false }
 func (f *fakeSource) RunScan(context.Context) bool   { f.scans.Add(1); return true }
+func (f *fakeSource) Decisions() map[string]updater.Decision {
+	return f.decisions
+}
 
 func newServer(t *testing.T, src *fakeSource) http.Handler {
 	t.Helper()
@@ -138,5 +143,30 @@ func TestSummarize(t *testing.T) {
 	s := summarize(sample())
 	if s.Upstream != 1 || s.Digest != 1 || s.Errors != 1 || s.Unpackaged != 1 || s.Current != 0 {
 		t.Errorf("summary = %+v", s)
+	}
+}
+
+func TestIndexShowsAutoUpdateDecisions(t *testing.T) {
+	src := &fakeSource{ready: true, report: scanner.Report{Images: []scanner.ImageReport{
+		{Key: "traefik:v3.7.19", Image: "traefik", Tag: "v3.7.19", Kind: versioning.KindMinor},
+		{Key: "redis:8.10.2-alpine", Image: "redis", Tag: "8.10.2-alpine", Kind: versioning.KindPatch},
+	}}}
+	src.decisions = map[string]updater.Decision{
+		"traefik:v3.7.19": {Key: "traefik:v3.7.19", Action: updater.ActionHold, Reason: "minor update needs review (autoUpdate: patch)",
+			Update: scanner.Update{ToTag: "v3.8.0", Kind: versioning.KindMinor}},
+		"redis:8.10.2-alpine": {Key: "redis:8.10.2-alpine", Action: updater.ActionWait, Reason: "waiting for the release to age",
+			ApplyAfter: time.Date(2026, 11, 19, 3, 0, 0, 0, time.Local), Update: scanner.Update{ToTag: "8.10.3-alpine", Kind: versioning.KindPatch, Security: false}},
+	}
+	rec := httptest.NewRecorder()
+	newServer(t, src).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	body := rec.Body.String()
+	for _, want := range []string{
+		"needs review: minor update needs review (autoUpdate: patch)",
+		`<span class="tag">v3.8.0</span>`,
+		"auto from Thu 19 Nov 03:00",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("page is missing %q", want)
+		}
 	}
 }

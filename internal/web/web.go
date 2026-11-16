@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cravingPixels/dimuda/internal/scanner"
+	"github.com/cravingPixels/dimuda/internal/updater"
 	"github.com/cravingPixels/dimuda/internal/versioning"
 )
 
@@ -23,6 +24,7 @@ type Source interface {
 	Report() (scanner.Report, bool)
 	Scanning() bool
 	RunScan(ctx context.Context) bool
+	Decisions() map[string]updater.Decision
 }
 
 type Server struct {
@@ -55,10 +57,11 @@ type summary struct {
 }
 
 type page struct {
-	Report   scanner.Report
-	Ready    bool
-	Scanning bool
-	Summary  summary
+	Report    scanner.Report
+	Ready     bool
+	Scanning  bool
+	Summary   summary
+	Decisions map[string]updater.Decision
 }
 
 func summarize(r scanner.Report) summary {
@@ -85,7 +88,7 @@ func summarize(r scanner.Report) summary {
 
 func (s *Server) index(w http.ResponseWriter, _ *http.Request) {
 	report, ready := s.src.Report()
-	p := page{Report: report, Ready: ready, Scanning: s.src.Scanning(), Summary: summarize(report)}
+	p := page{Report: report, Ready: ready, Scanning: s.src.Scanning(), Summary: summarize(report), Decisions: s.src.Decisions()}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.tmpl.ExecuteTemplate(w, "index.html", p); err != nil {
 		s.log.Error("render index", "err", err)
@@ -135,6 +138,12 @@ var funcs = template.FuncMap{
 			return ""
 		}
 		return t.Format("2006-01-02")
+	},
+	"when": func(t time.Time) string {
+		if t.IsZero() {
+			return ""
+		}
+		return t.Local().Format("Mon 2 Jan 15:04")
 	},
 	"upstream": func(k versioning.Kind) bool { return k.IsUpstream() },
 	"filterKind": func(img scanner.ImageReport) string {

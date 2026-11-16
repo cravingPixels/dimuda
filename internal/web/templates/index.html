@@ -50,6 +50,8 @@ tr:last-child td { border-bottom: 0; }
 .k-major { background: var(--major); } .k-minor { background: var(--minor); } .k-patch { background: var(--patch); }
 .k-rebuild { background: var(--rebuild); } .k-digest { background: var(--digest); } .k-none { background: var(--ok); }
 .k-unknown { background: var(--err); }
+.auto { font-size: 12px; margin-top: 4px; }
+.auto-apply { color: var(--ok); } .auto-wait { color: var(--muted); } .auto-hold { color: var(--minor); font-weight: 600; }
 .err { color: var(--err); font-size: 12px; }
 .warn { color: var(--minor); font-size: 12px; }
 .muted { color: var(--muted); }
@@ -148,6 +150,15 @@ a { color: var(--patch); }
         {{else if eq .Kind "digest"}}<span class="badge k-digest">digest</span><div class="note">tag moved, version unknown</div>
         {{else if or .LocalBuild .Ignored}}<span class="muted">—</span>
         {{else}}<span class="badge k-none">up to date</span>{{end}}
+
+        {{with index $.Decisions .Key}}
+        <div class="auto auto-{{.Action}}" title="{{range .Changes}}{{.File}}: {{.New}}&#10;{{end}}">
+          → <span class="tag">{{.Update.ToTag}}</span>{{if .Update.Security}} <strong>security</strong>{{end}}
+          {{if eq .Action "apply"}}applied{{with .Reason}} · {{.}}{{end}}
+          {{else if eq .Action "wait"}}auto {{with when .ApplyAfter}}from {{.}}{{end}}{{with .Reason}} · {{.}}{{end}}
+          {{else}}needs review: {{.Reason}}{{end}}
+        </div>
+        {{end}}
 
         {{if .Releases}}
         <details>

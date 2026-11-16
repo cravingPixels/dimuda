@@ -74,6 +74,20 @@ type Usage struct {
 	Stack   string `json:"stack"`
 	Service string `json:"service"`
 	File    string `json:"file"`
+	Raw     string `json:"raw"`
+	// Procedure is the Komodo procedure the service's stack is deployed with, if any.
+	Procedure string `json:"procedure,omitempty"`
+}
+
+// Update is the change dimuda would make to the compose files: always an exact tag plus the
+// digest it serves, and never across a major version.
+type Update struct {
+	FromTag    string          `json:"fromTag"`
+	FromDigest string          `json:"fromDigest"`
+	ToTag      string          `json:"toTag"`
+	ToDigest   string          `json:"toDigest"`
+	Kind       versioning.Kind `json:"kind"`
+	Security   bool            `json:"security"`
 }
 
 type Running struct {
@@ -105,6 +119,7 @@ type ImageReport struct {
 	Note          string              `json:"note"`
 	Ignored       bool                `json:"ignored"`
 	LocalBuild    bool                `json:"localBuild"`
+	Update        *Update             `json:"update,omitempty"`
 	Err           string              `json:"error"`
 }
 
@@ -191,12 +206,14 @@ func rank(r ImageReport) int {
 		return 3
 	case r.Kind == versioning.KindDigest:
 		return 4
-	case r.Err != "":
+	case r.Kind == versioning.KindPin:
 		return 5
-	case r.Kind == versioning.KindUnknown:
+	case r.Err != "":
 		return 6
+	case r.Kind == versioning.KindUnknown:
+		return 7
 	}
-	return 7
+	return 8
 }
 
 func stacksOf(images []ImageReport) []string {
@@ -271,7 +288,7 @@ func groupUsages(usages []compose.Usage) ([]*group, []ImageReport) {
 }
 
 func toUsage(u compose.Usage) Usage {
-	return Usage{Source: u.Source, Stack: u.Stack, Service: u.Service, File: u.File}
+	return Usage{Source: u.Source, Stack: u.Stack, Service: u.Service, File: u.File, Raw: u.Raw, Procedure: u.Procedure}
 }
 
 func (s *Scanner) checkRepo(ctx context.Context, groups []*group, containers []docker.Container) []ImageReport {
@@ -367,9 +384,14 @@ func (s *Scanner) checkTag(ctx context.Context, r *ImageReport, ref imageref.Ref
 		return
 	}
 	r.RemoteDigest = remote
+	// With a digest pin, the compose file asks for that digest, not whatever the tag serves now.
+	wanted := remote
+	if ref.Digest != "" {
+		wanted = ref.Digest
+	}
 	digestMoved := false
 	for i := range r.Running {
-		if r.Running[i].Digest != "" && r.Running[i].Digest != remote {
+		if r.Running[i].Digest != "" && r.Running[i].Digest != wanted {
 			r.Running[i].Outdated = true
 			digestMoved = true
 		}
@@ -406,6 +428,92 @@ func (s *Scanner) checkTag(ctx context.Context, r *ImageReport, ref imageref.Ref
 	}
 
 	s.attachChangelog(ctx, r, parser, cur, parsed, tags)
+	s.planUpdate(ctx, r, ref, parser, cur, parsed, tags, remote)
+}
+
+// planUpdate decides what the compose line should become: a floating or digest-less tag is
+// pinned to what it serves today, a pinned tag moves to the newest release of its major.
+func (s *Scanner) planUpdate(ctx context.Context, r *ImageReport, ref imageref.Ref, parser versioning.Parser, cur versioning.Tag, parsed bool, tags []versioning.Tag, remote string) {
+	if !parsed || r.Floating {
+		to, digest := r.ResolvesTo, remote
+		if r.PinTo != "" && lessSpecific(parser, to, r.PinTo) {
+			// The floating tag serves a build no release tag shares (a rebuild in flight, or a
+			// lookup that failed), or only another floating tag ("v3" = "v3.7"): pin the newest
+			// release of its line at that tag's own digest.
+			d, err := s.Registry.Digest(ctx, ref, r.PinTo)
+			if err != nil {
+				r.Note = joinNote(r.Note, fmt.Sprintf("cannot read the digest of %s: %s", r.PinTo, describe(err)))
+				return
+			}
+			to, digest = r.PinTo, d
+		}
+		if to == "" {
+			r.Note = joinNote(r.Note, "floating tag with no matching version tag; pin it by hand")
+			return
+		}
+		r.Update = &Update{FromTag: ref.Tag, FromDigest: ref.Digest, ToTag: to, ToDigest: digest, Kind: versioning.KindPin}
+		r.Kind = higher(r.Kind, versioning.KindPin)
+		return
+	}
+	if ref.Digest != "" && ref.Digest != remote {
+		r.Note = joinNote(r.Note, "tag re-pushed: the registry serves a different digest than the pin")
+		r.Update = &Update{FromTag: ref.Tag, FromDigest: ref.Digest, ToTag: ref.Tag, ToDigest: remote, Kind: versioning.KindDigest}
+		return
+	}
+
+	target := versioning.LatestInMajor(cur, tags)
+	if kind := versioning.Classify(cur, target); kind != versioning.KindNone {
+		digest, err := s.Registry.Digest(ctx, ref, target.Raw)
+		if err != nil {
+			r.Note = joinNote(r.Note, fmt.Sprintf("cannot read the digest of %s: %s", target.Raw, describe(err)))
+			return
+		}
+		r.Update = &Update{
+			FromTag: ref.Tag, FromDigest: ref.Digest, ToTag: target.Raw, ToDigest: digest, Kind: kind,
+			Security: s.securityFix(ctx, r, cur, target),
+		}
+		return
+	}
+	if ref.Digest == "" {
+		pinned := ref.Tag
+		if cur.Build == "" {
+			if variant := s.resolve(ctx, ref, remote, versioning.BuildVariants(cur, tags)); variant != "" {
+				pinned = variant
+			}
+		}
+		r.Update = &Update{FromTag: ref.Tag, ToTag: pinned, ToDigest: remote, Kind: versioning.KindPin}
+		r.Kind = higher(r.Kind, versioning.KindPin)
+	}
+}
+
+// lessSpecific reports whether resolved is missing or names fewer version components than
+// release, i.e. is not itself an exact release tag.
+func lessSpecific(parser versioning.Parser, resolved, release string) bool {
+	if resolved == "" {
+		return true
+	}
+	a, okA := parser.Parse(resolved)
+	b, okB := parser.Parse(release)
+	return okA && okB && len(a.Version) < len(b.Version)
+}
+
+// higher keeps an upstream kind already found (a pending major stays visible) over a pin.
+func higher(current, candidate versioning.Kind) versioning.Kind {
+	if current == versioning.KindNone {
+		return candidate
+	}
+	return current
+}
+
+func (s *Scanner) securityFix(ctx context.Context, r *ImageReport, from, to versioning.Tag) bool {
+	if r.ChangelogRepo == "" || s.Releases == nil {
+		return false
+	}
+	releases, err := s.Releases.Releases(ctx, r.ChangelogRepo)
+	if err != nil {
+		return false
+	}
+	return changelog.MentionsSecurity(changelog.Between(releases, from, to))
 }
 
 // floatingKind upgrades a moved floating tag to a real upstream kind when the running

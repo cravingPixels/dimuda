@@ -20,6 +20,8 @@ const (
 	maxBodySize = 6000
 )
 
+var securityFix = regexp.MustCompile(`(?i)\b(CVE-\d{4}-\d+|GHSA(-[0-9a-z]{4}){3}|security|vulnerabilit(y|ies))\b`)
+
 var githubRepo = regexp.MustCompile(`^(?:https?://|git@)?github\.com[/:]([\w.-]+)/([\w.-]+?)(?:\.git)?/?$`)
 
 type Release struct {
@@ -209,4 +211,15 @@ func ParseReleaseTag(tag string) (versioning.Tag, bool) {
 		tag = tag[i+1:]
 	}
 	return (versioning.Parser{}).Parse(tag)
+}
+
+// MentionsSecurity reports whether any release note names a security fix. It errs on the side
+// of yes: a false positive only makes an update skip the waiting period.
+func MentionsSecurity(releases []Release) bool {
+	for _, r := range releases {
+		if securityFix.MatchString(r.Name) || securityFix.MatchString(r.Body) {
+			return true
+		}
+	}
+	return false
 }

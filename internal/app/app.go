@@ -16,6 +16,7 @@ import (
 
 	"github.com/cravingPixels/dimuda/internal/notify"
 	"github.com/cravingPixels/dimuda/internal/scanner"
+	"github.com/cravingPixels/dimuda/internal/updater"
 )
 
 type Scanner interface {
@@ -29,6 +30,23 @@ type Notifier interface {
 type state struct {
 	Report   *scanner.Report   `json:"report"`
 	Notified map[string]string `json:"notified"`
+	// FirstSeen and Applied are keyed by updater.Target: when an update was first offered, and
+	// which ones dimuda committed (so a reverted one is not applied again).
+	FirstSeen map[string]time.Time `json:"firstSeen"`
+	Applied   map[string]time.Time `json:"applied"`
+	Decisions []updater.Decision   `json:"decisions"`
+}
+
+func (s *state) init() {
+	if s.Notified == nil {
+		s.Notified = map[string]string{}
+	}
+	if s.FirstSeen == nil {
+		s.FirstSeen = map[string]time.Time{}
+	}
+	if s.Applied == nil {
+		s.Applied = map[string]time.Time{}
+	}
 }
 
 type App struct {
@@ -37,6 +55,10 @@ type App struct {
 	statePath string
 	publicURL string
 	log       *slog.Logger
+	auto      *AutoUpdate
+
+	tokenChecker TokenChecker
+	tokens       []Token
 
 	scanMu sync.Mutex
 	mu     sync.RWMutex
@@ -54,8 +76,8 @@ func New(s Scanner, n Notifier, dataDir, publicURL string, log *slog.Logger) (*A
 		statePath: filepath.Join(dataDir, "state.json"),
 		publicURL: publicURL,
 		log:       log,
-		state:     state{Notified: map[string]string{}},
 	}
+	a.state.init()
 	raw, err := os.ReadFile(a.statePath)
 	switch {
 	case errors.Is(err, os.ErrNotExist):
@@ -66,9 +88,7 @@ func New(s Scanner, n Notifier, dataDir, publicURL string, log *slog.Logger) (*A
 		if err := json.Unmarshal(raw, &a.state); err != nil {
 			return nil, fmt.Errorf("decode state %s: %w", a.statePath, err)
 		}
-		if a.state.Notified == nil {
-			a.state.Notified = map[string]string{}
-		}
+		a.state.init()
 	}
 	return a, nil
 }
@@ -82,24 +102,56 @@ func (a *App) Report() (scanner.Report, bool) {
 	return *a.state.Report, true
 }
 
+// EnableAutoUpdate makes every scan commit the updates au's policy allows.
+func (a *App) EnableAutoUpdate(au AutoUpdate) {
+	a.auto = &au
+}
+
+// Decisions maps image keys to what auto-update decided for them in the last scan.
+func (a *App) Decisions() map[string]updater.Decision {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	out := make(map[string]updater.Decision, len(a.state.Decisions))
+	for _, d := range a.state.Decisions {
+		out[d.Key] = d
+	}
+	return out
+}
+
 func (a *App) Scanning() bool {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.scanning
 }
 
-// Run scans immediately and then every interval until ctx is cancelled.
+// Run scans immediately and then every interval until ctx is cancelled. With an update window it
+// also scans just after the window opens, so waiting updates do not depend on the interval
+// happening to land inside it.
 func (a *App) Run(ctx context.Context, interval time.Duration) {
 	a.RunScan(ctx)
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
+		window := make(<-chan time.Time)
+		var timer *time.Timer
+		if a.auto != nil && a.auto.Policy.Window.IsSet() {
+			opens := a.auto.Policy.Window.NextStart(a.auto.now()).Add(time.Minute)
+			timer = time.NewTimer(time.Until(opens))
+			window = timer.C
+		}
 		select {
 		case <-ctx.Done():
+			if timer != nil {
+				timer.Stop()
+			}
 			return
 		case <-ticker.C:
-			a.RunScan(ctx)
+		case <-window:
 		}
+		if timer != nil {
+			timer.Stop()
+		}
+		a.RunScan(ctx)
 	}
 }
 
@@ -118,18 +170,50 @@ func (a *App) RunScan(ctx context.Context) bool {
 		a.log.Warn("scan error", "err", e)
 	}
 
-	pending := a.newUpstreamUpdates(report)
-	if len(pending) > 0 && !a.fresh && a.notifier != nil {
-		if err := a.notifier.Send(ctx, a.message(pending)); err != nil {
-			a.log.Error("notification failed, will retry next scan", "err", err)
-			pending = nil
+	var notes []note
+	if a.auto != nil {
+		out := a.autoUpdate(ctx, report)
+		for _, d := range out.applied {
+			a.log.Info("update applied", "image", d.Image, "from", d.Update.FromTag, "to", d.Update.ToTag, "kind", d.Update.Kind)
 		}
+		for _, f := range out.failures {
+			a.log.Error("auto-update", "err", f)
+		}
+		notes = a.autoNotes(report, out)
+	} else if pending := a.newUpstreamUpdates(report); len(pending) > 0 {
+		marks := map[string]string{}
+		for _, p := range pending {
+			marks[p.Key] = p.target
+		}
+		notes = append(notes, note{msg: a.message(pending), marks: marks})
+	}
+
+	if a.tokenChecker != nil {
+		notes = append(notes, a.tokenNotes(ctx, time.Now())...)
+	}
+
+	var delivered []note
+	for _, n := range notes {
+		if n.msg.Title == "" || a.notifier == nil || (a.fresh && !n.always) {
+			delivered = append(delivered, n)
+			continue
+		}
+		if err := a.notifier.Send(ctx, n.msg); err != nil {
+			a.log.Error("notification failed, will retry next scan", "err", err)
+			continue
+		}
+		delivered = append(delivered, n)
 	}
 
 	a.mu.Lock()
 	a.state.Report = &report
-	for _, p := range pending {
-		a.state.Notified[p.Key] = p.target
+	for _, n := range delivered {
+		for k, v := range n.marks {
+			a.state.Notified[k] = v
+		}
+		for _, k := range n.clear {
+			delete(a.state.Notified, k)
+		}
 	}
 	a.fresh = false
 	a.mu.Unlock()

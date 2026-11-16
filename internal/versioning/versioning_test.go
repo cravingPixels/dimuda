@@ -173,3 +173,37 @@ func TestIsUpstream(t *testing.T) {
 		}
 	}
 }
+
+func TestLatestInMajor(t *testing.T) {
+	p := Parser{}
+	tags := p.ParseAll([]string{"v4.0.20", "v4.0.21", "v4.1.0", "v5.0.0", "v4.2"})
+	cur := mustParse(t, p, "v4.0.20")
+	if got := LatestInMajor(cur, tags).Raw; got != "v4.1.0" {
+		t.Errorf("LatestInMajor = %q, want v4.1.0: v5 is another major, v4.2 another precision", got)
+	}
+	if got := Latest(cur, tags).Raw; got != "v5.0.0" {
+		t.Errorf("Latest = %q, want v5.0.0", got)
+	}
+
+	cal := mustParse(t, p, "2026.11.0")
+	calTags := p.ParseAll([]string{"2026.11.0", "2026.12.1", "2027.01.0"})
+	if got := LatestInMajor(cal, calTags).Raw; got != "2027.01.0" {
+		t.Errorf("calendar LatestInMajor = %q, want 2027.01.0", got)
+	}
+	if got := Classify(cal, mustParse(t, p, "2027.01.0")); got != KindMinor {
+		t.Errorf("new calendar year = %s, want minor", got)
+	}
+}
+
+func TestBuildVariants(t *testing.T) {
+	p := Parser{}
+	tags := p.ParseAll([]string{"35.0.3", "35.0.3-ls399", "35.0.3-ls401", "35.0.2-ls402", "35.0.3-ls400"})
+	got := BuildVariants(mustParse(t, p, "35.0.3"), tags)
+	var raws []string
+	for _, t := range got {
+		raws = append(raws, t.Raw)
+	}
+	if want := []string{"35.0.3-ls401", "35.0.3-ls400", "35.0.3-ls399"}; !reflect.DeepEqual(raws, want) {
+		t.Errorf("BuildVariants = %v, want %v", raws, want)
+	}
+}
